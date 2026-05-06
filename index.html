@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arvaa Hinta</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0b0f14;
+  color: white;
+  display: flex;
+  justify-content: center;
+  padding: 30px;
+}
+
+.container { width: 100%; max-width: 450px; }
+
+.card {
+  background: #141a22;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+img {
+  width: 100%;
+  height: 220px;
+  object-fit: contain;
+  background: white;
+  border-radius: 12px;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 10px;
+  border: none;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  background: #ff9900;
+  border: none;
+  border-radius: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.stats { margin-top: 10px; opacity: 0.8; }
+
+.result { margin-top: 10px; font-weight: bold; }
+
+.green { color: #4dff88; }
+.yellow { color: #ffd34d; }
+.red { color: #ff5c5c; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="card">
+    <h2>🎯 Arvaa hinta</h2>
+
+    <img id="img">
+
+    <div id="name">Loading...</div>
+
+    <input id="guess" type="number" placeholder="Syötä hinta €">
+
+    <button onclick="check()">Arvaa</button>
+
+    <div id="result" class="result"></div>
+
+    <div class="stats">
+      Score: <span id="score">0</span> |
+      Streak: <span id="streak">0</span> |
+      x<span id="mult">1</span>
+    </div>
+
+    <button onclick="next()">Seuraava</button>
+  </div>
+</div>
+
+<script>
+
+// ---------- FALLBACK 2000 TUOTETTA ----------
+function generateFallback() {
+  const names = ["Puhelin", "Kuulokkeet", "Tuoli", "Pöytä", "Tietokone", "Kaiutin", "Lamppu"];
+  let arr = [];
+
+  for (let i = 0; i < 2000; i++) {
+    arr.push({
+      name: names[Math.floor(Math.random()*names.length)] + " #" + i,
+      price: Math.floor(Math.random()*3000)+10,
+      img: ""
+    });
+  }
+  return arr;
+}
+
+// ---------- DATA ----------
+let products = [];
+let index = 0;
+
+let score = 0;
+let streak = 0;
+let mult = 1;
+
+// ---------- LOAD ----------
+async function loadProducts() {
+  try {
+    const res = await fetch("https://fakestoreapi.com/products");
+    const data = await res.json();
+
+    return data.map(p => ({
+      name: p.title,
+      price: Math.round(p.price * 100),
+      img: p.image
+    }));
+  } catch (e) {
+    return generateFallback();
+  }
+}
+
+// ---------- INIT ----------
+async function init() {
+  products = await loadProducts();
+  show();
+}
+
+function show() {
+  const p = products[index];
+  document.getElementById("name").innerText = p.name;
+  document.getElementById("img").src = p.img || "";
+}
+
+// ---------- GAME ----------
+function check() {
+  const guess = Number(document.getElementById("guess").value);
+  const p = products[index];
+
+  const diff = Math.abs(guess - p.price);
+  const percent = diff / p.price;
+
+  let result = document.getElementById("result");
+  let earned = 0;
+
+  if (percent < 0.2) {
+    streak++;
+    mult = Math.min(5, mult + 1);
+    earned = Math.floor((1 - percent) * 100) * mult;
+    result.className = "result green";
+    result.innerText = "🔥 Lähellä!";
+  }
+  else if (percent < 0.5) {
+    streak = 0;
+    mult = 1;
+    earned = 20;
+    result.className = "result yellow";
+    result.innerText = guess < p.price ? "⬆️ Liian halpa" : "⬇️ Liian kallis";
+  }
+  else {
+    streak = 0;
+    mult = 1;
+    earned = 5;
+    result.className = "result red";
+    result.innerText = "❌ Ohi meni!";
+  }
+
+  score += earned;
+  updateUI();
+}
+
+// ---------- NEXT ----------
+function next() {
+  index++;
+  if (index >= products.length) index = 0;
+  show();
+  document.getElementById("guess").value = "";
+  document.getElementById("result").innerText = "";
+}
+
+// ---------- UI ----------
+function updateUI() {
+  document.getElementById("score").innerText = score;
+  document.getElementById("streak").innerText = streak;
+  document.getElementById("mult").innerText = mult;
+}
+
+// start
+init();
+
+</script>
+
+</body>
+</html>
