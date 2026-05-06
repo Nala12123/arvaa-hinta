@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arvaa Hinta</title>
+<title>Arvaa Hinta PRO</title>
 
 <style>
 body {
@@ -16,7 +16,7 @@ body {
   padding: 30px;
 }
 
-.container { width: 100%; max-width: 450px; }
+.container { width: 100%; max-width: 500px; }
 
 .card {
   background: #141a22;
@@ -33,7 +33,7 @@ img {
   border-radius: 12px;
 }
 
-input {
+input, button {
   width: 100%;
   padding: 10px;
   margin-top: 10px;
@@ -42,23 +42,35 @@ input {
 }
 
 button {
-  width: 100%;
-  padding: 12px;
-  margin-top: 10px;
   background: #ff9900;
-  border: none;
-  border-radius: 10px;
   font-weight: bold;
   cursor: pointer;
 }
 
-.stats { margin-top: 10px; opacity: 0.8; }
+.stats { margin-top: 10px; }
 
-.result { margin-top: 10px; font-weight: bold; }
+.result {
+  margin-top: 10px;
+  font-weight: bold;
+  transition: transform 0.2s;
+}
+
+.bump { transform: scale(1.1); }
 
 .green { color: #4dff88; }
 .yellow { color: #ffd34d; }
 .red { color: #ff5c5c; }
+
+.leaderboard {
+  margin-top: 15px;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.leaderboard div {
+  display: flex;
+  justify-content: space-between;
+}
 </style>
 </head>
 
@@ -66,14 +78,12 @@ button {
 
 <div class="container">
   <div class="card">
-    <h2>🎯 Arvaa hinta</h2>
+    <h2>🎯 Arvaa hinta PRO</h2>
 
     <img id="img">
-
     <div id="name">Loading...</div>
 
     <input id="guess" type="number" placeholder="Syötä hinta €">
-
     <button onclick="check()">Arvaa</button>
 
     <div id="result" class="result"></div>
@@ -81,29 +91,24 @@ button {
     <div class="stats">
       Score: <span id="score">0</span> |
       Streak: <span id="streak">0</span> |
+      Best Streak: <span id="bestStreak">0</span> |
+      Best Score: <span id="bestScore">0</span> |
       x<span id="mult">1</span>
     </div>
 
     <button onclick="next()">Seuraava</button>
+
+    <div class="leaderboard">
+      <h3>🏆 Top 10</h3>
+      <div id="board"></div>
+    </div>
   </div>
 </div>
 
 <script>
-
-// ---------- FALLBACK 2000 TUOTETTA ----------
-function generateFallback() {
-  const names = ["Puhelin", "Kuulokkeet", "Tuoli", "Pöytä", "Tietokone", "Kaiutin", "Lamppu"];
-  let arr = [];
-
-  for (let i = 0; i < 2000; i++) {
-    arr.push({
-      name: names[Math.floor(Math.random()*names.length)] + " #" + i,
-      price: Math.floor(Math.random()*3000)+10,
-      img: ""
-    });
-  }
-  return arr;
-}
+// ---------- SOUND ----------
+const goodSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+const badSound = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
 
 // ---------- DATA ----------
 let products = [];
@@ -113,18 +118,31 @@ let score = 0;
 let streak = 0;
 let mult = 1;
 
+let bestStreak = localStorage.getItem("bestStreak") || 0;
+let bestScore = localStorage.getItem("bestScore") || 0;
+let leaderboard = JSON.parse(localStorage.getItem("leaderboard") || "[]");
+
+// ---------- FALLBACK ----------
+function generateFallback() {
+  const names = ["Puhelin", "Kuulokkeet", "Tuoli", "Pöytä"];
+  return Array.from({length: 500}, (_, i) => ({
+    name: names[Math.random()*names.length|0] + " #" + i,
+    price: Math.floor(Math.random()*2000)+50,
+    img: ""
+  }));
+}
+
 // ---------- LOAD ----------
 async function loadProducts() {
   try {
     const res = await fetch("https://fakestoreapi.com/products");
     const data = await res.json();
-
     return data.map(p => ({
       name: p.title,
       price: Math.round(p.price * 100),
       img: p.image
     }));
-  } catch (e) {
+  } catch {
     return generateFallback();
   }
 }
@@ -133,8 +151,11 @@ async function loadProducts() {
 async function init() {
   products = await loadProducts();
   show();
+  updateUI();
+  drawBoard();
 }
 
+// ---------- SHOW ----------
 function show() {
   const p = products[index];
   document.getElementById("name").innerText = p.name;
@@ -152,39 +173,77 @@ function check() {
   let result = document.getElementById("result");
   let earned = 0;
 
+  result.classList.remove("bump");
+  void result.offsetWidth;
+  result.classList.add("bump");
+
   if (percent < 0.2) {
     streak++;
     mult = Math.min(5, mult + 1);
     earned = Math.floor((1 - percent) * 100) * mult;
-    result.className = "result green";
+    result.className = "result green bump";
     result.innerText = "🔥 Lähellä!";
+    goodSound.play();
   }
   else if (percent < 0.5) {
     streak = 0;
     mult = 1;
     earned = 20;
-    result.className = "result yellow";
-    result.innerText = guess < p.price ? "⬆️ Liian halpa" : "⬇️ Liian kallis";
+    result.className = "result yellow bump";
+    result.innerText = `${guess < p.price ? "⬆️ Liian halpa" : "⬇️ Liian kallis"} | Oikea: ${p.price}€`;
+    badSound.play();
   }
   else {
     streak = 0;
     mult = 1;
     earned = 5;
-    result.className = "result red";
-    result.innerText = "❌ Ohi meni!";
+    result.className = "result red bump";
+    result.innerText = `❌ Ohi! Oikea: ${p.price}€`;
+    badSound.play();
+  }
+
+  if (streak > bestStreak) {
+    bestStreak = streak;
+    localStorage.setItem("bestStreak", bestStreak);
   }
 
   score += earned;
+
+  if (score > bestScore) {
+    bestScore = score;
+    localStorage.setItem("bestScore", bestScore);
+  }
+
   updateUI();
 }
 
 // ---------- NEXT ----------
 function next() {
   index++;
-  if (index >= products.length) index = 0;
+  if (index >= products.length) endGame();
+
   show();
   document.getElementById("guess").value = "";
   document.getElementById("result").innerText = "";
+}
+
+// ---------- END GAME ----------
+function endGame() {
+  let name = prompt("Peli ohi! Nimi leaderboardiin:");
+  if (!name) name = "Anon";
+
+  leaderboard.push({name, score});
+  leaderboard.sort((a,b)=>b.score-a.score);
+  leaderboard = leaderboard.slice(0,10);
+
+  localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
+
+  score = 0;
+  streak = 0;
+  mult = 1;
+  index = 0;
+
+  drawBoard();
 }
 
 // ---------- UI ----------
@@ -192,6 +251,19 @@ function updateUI() {
   document.getElementById("score").innerText = score;
   document.getElementById("streak").innerText = streak;
   document.getElementById("mult").innerText = mult;
+  document.getElementById("bestStreak").innerText = bestStreak;
+  document.getElementById("bestScore").innerText = bestScore;
+}
+
+function drawBoard() {
+  const el = document.getElementById("board");
+  el.innerHTML = "";
+
+  leaderboard.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.innerHTML = `<span>#${i+1} ${p.name}</span><span>${p.score}</span>`;
+    el.appendChild(row);
+  });
 }
 
 // start
